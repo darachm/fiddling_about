@@ -35,10 +35,9 @@ X = scaler.fit_transform(X.astype(float))
 Y = train_data['SL_RD_copy_estimate'].values
 
 amodel = keras.models.Sequential()
-amodel.add(keras.layers.Dense(39, input_dim=13, activation='sigmoid'))
-amodel.add(keras.layers.Dense(39, input_dim=39, activation='relu'))
-amodel.add(keras.layers.Dense(13, input_dim=39, activation='relu'))
-amodel.add(keras.layers.Dense(3,  input_dim=13, activation='relu'))
+amodel.add(keras.layers.Dense(39,input_dim=13, activation='relu'))
+amodel.add(keras.layers.Dense(9, input_dim=39, activation='relu'))
+amodel.add(keras.layers.Dense(3, input_dim=9 , activation='relu'))
 amodel.add(keras.layers.Dense(1, input_dim=3))
 amodel.compile(loss='mean_squared_error', optimizer='adam')
 amodel.fit(X, Y, epochs=3, batch_size=100)
