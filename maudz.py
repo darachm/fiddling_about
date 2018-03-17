@@ -18,61 +18,33 @@ from deeplift.conversion import keras_conversion as kc
 #instantiate scaler
 scaler = sklearn.preprocessing.MinMaxScaler()
 
-wt_df_pd  = pd.read_csv("data/WT_FL1.csv")
-one_df_pd = pd.read_csv("data/OneCopy_FL1.csv")
-two_df_pd = pd.read_csv("data/TwoCopy_FL1.csv")
+fulldata  = pd.read_csv("data/fl_cn_training_data.csv")
 
-meanz = [
-    list(wt_df_pd.apply( lambda row: np.mean(row))),
-    list(one_df_pd.apply(lambda row: np.mean(row))),
-    list(two_df_pd.apply(lambda row: np.mean(row)))
-  ]
+one_meanz = [ 
+    list(fulldata[fulldata['SL_RD_copy_estimate']==1][fulldata.columns.difference(['SL_RD_copy_estimate','Time'])].apply( lambda row: np.mean(row))) 
+  ] 
 
-#add category type
-wt_df_pd['copy_number']  = 0
-one_df_pd['copy_number'] = 1
-two_df_pd['copy_number'] = 2
+#for func in [np.mean,np.median,np.var]:
+#  print(func)
+#  print(pd.DataFrame(fulldata).apply(lambda row: func(row)))
 
-union_df = one_df_pd.append(two_df_pd)
-union_df = union_df.append(wt_df_pd)
-union_df = sklearn.utils.shuffle(union_df)
-union_dataset = union_df.values
+train_data = sklearn.utils.shuffle(fulldata)
 
-X = scaler.fit_transform(union_dataset[:,0:3].astype(float))
+X = train_data[train_data.columns.difference(['SL_RD_copy_estimate','Time'])]
+X = scaler.fit_transform(X.astype(float))
+Y = train_data['SL_RD_copy_estimate'].values
 
-for func in [np.mean,np.median,np.var]:
-  print(func)
-  print(pd.DataFrame(union_dataset).apply(lambda row: func(row)))
-
-encoder = sklearn.preprocessing.LabelEncoder()
-encoder.fit(union_dataset[:,3])
-encoded_Y = encoder.transform(union_dataset[:,3])
-
-# one hot encode on those categorical columns
-Y = keras.utils.np_utils.to_categorical(encoded_Y)
-
-def threeway_model():
-  model = keras.models.Sequential()
-#  model.add(keras.layers.Dense(27, input_dim=3, activation='relu'))
-  model.add(keras.layers.Dense(1, input_dim=3, activation='relu'))
-  model.add(keras.layers.Dense(3, activation='softmax'))
-  # Compile model
-  model.compile(loss='categorical_crossentropy', optimizer='adam', metrics=['accuracy'])
-  return(model)
-
-# evaluate performance using validation and kfold cross-validation
-#estimator = KerasClassifier(build_fn=threeway_model,validation_split=0.33, epochs=3, verbose=1)
-#kfold = KFold(n_splits=3, shuffle=True)
-#results = cross_val_score(estimator, X, Y, cv=kfold)
-#print("Baseline: %.2f%% (%.2f%%)" % (results.mean()*100, results.std()*100))
-
-# detailed evaluation of predictions
-#estimator.fit(X, Y, validation_split=0.33, epochs=3, verbose=1)
-#predict = estimator.predict(X)
-
-# refit so I have a real
-amodel = threeway_model()
+amodel = keras.models.Sequential()
+amodel.add(keras.layers.Dense(39, input_dim=13, activation='sigmoid'))
+amodel.add(keras.layers.Dense(39, input_dim=39, activation='relu'))
+amodel.add(keras.layers.Dense(13, input_dim=39, activation='relu'))
+amodel.add(keras.layers.Dense(3,  input_dim=13, activation='relu'))
+amodel.add(keras.layers.Dense(1, input_dim=3))
+amodel.compile(loss='mean_squared_error', optimizer='adam')
 amodel.fit(X, Y, epochs=3, batch_size=100)
+
+### A lot of the below is just copied straight from the deeplift 
+### example of how to use it
 
 #NonlinearMxtsMode defines the method for computing importance scores.
 #NonlinearMxtsMode.DeepLIFT_GenomicsDefault uses the RevealCancel rule on Dense layers
@@ -102,7 +74,7 @@ find_scores_layer_idx = 0
 
 deeplift_contribs_func = deeplift_model.get_target_contribs_func(
   find_scores_layer_idx=find_scores_layer_idx,
-  target_layer_idx=-2)
+  target_layer_idx=-1)
 
 #You can also provide an array of indices to find_scores_layer_idx to get scores for multiple layers at once
 
@@ -114,34 +86,18 @@ deeplift_contribs_func = deeplift_model.get_target_contribs_func(
 #Eg: if the output is a 10-way softmax, and task_idx is 0, we will compute scores for the first softmax class
 
 predictions = amodel.predict(X)
-which_predicted = [i.argsort()[-1] for i in predictions]
 
-output = None
+scorez = pd.DataFrame(deeplift_contribs_func(task_idx=0,
+  input_data_list=[X],
+  input_references_list=one_meanz,
+  batch_size=100,
+  progress_update=100000))
 
-for real,pred in [ (x,y) for x in [0,1,2] for y in[0,1,2] ]:
-#  print("Looking for contributions of variables to predicting a"+real+" as a "+pred" , relative to wild-type means.")
-  tmp_X = X[ [i==pred and j==real  for i,j in zip(which_predicted,encoded_Y)  ]  ]
-  tmp_result = pd.DataFrame(deeplift_contribs_func(task_idx=pred,
-    input_data_list=[tmp_X],
-    input_references_list=meanz[real],
-    batch_size=100,
-    progress_update=10000))
-  tmp_result['real'] = real
-  tmp_result['pred'] = pred 
-  try:
-    output = output.append(tmp_result)
-  except:
-    output = tmp_result
+scorez.columns = train_data.columns[0:13]
 
-output = output.rename(columns={0:'FSCmaybe',1:'SSCmaybe',2:'FL1maybe'})
+scorez['real'] = Y
+scorez['pred'] = predictions
 
-output.to_csv('scores_by_predictions.csv')
+scorez.to_csv('scores_trained_on_all.csv')
 
-
-#scores1 = np.array(deeplift_contribs_func(task_idx=1,
-#  input_data_list=[X],
-#  input_references_list=wt_meanz,
-#  batch_size=100,
-#  progress_update=10000))
-#np.savetxt("scores1.csv", scores1, delimiter=",")
 
