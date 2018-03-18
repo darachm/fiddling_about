@@ -24,6 +24,13 @@ one_meanz = [
     list(fulldata[fulldata['SL_RD_copy_estimate']==1][fulldata.columns.difference(['SL_RD_copy_estimate','Time'])].apply( lambda row: np.mean(row))) 
   ] 
 
+meanz = [ 
+    list(fulldata[fulldata['SL_RD_copy_estimate']==0][fulldata.columns.difference(['SL_RD_copy_estimate','Time'])].apply( lambda row: np.mean(row))),
+    list(fulldata[fulldata['SL_RD_copy_estimate']==1][fulldata.columns.difference(['SL_RD_copy_estimate','Time'])].apply( lambda row: np.mean(row))) 
+  ] 
+
+zero_meanz = list(fulldata[fulldata['SL_RD_copy_estimate']==0][fulldata.columns.difference(['SL_RD_copy_estimate','Time'])].apply( lambda row: np.mean(row))) 
+
 #for func in [np.mean,np.median,np.var]:
 #  print(func)
 #  print(pd.DataFrame(fulldata).apply(lambda row: func(row)))
@@ -88,7 +95,7 @@ predictions = amodel.predict(X)
 
 scorez = pd.DataFrame(deeplift_contribs_func(task_idx=0,
   input_data_list=[X],
-  input_references_list=one_meanz,
+  input_references_list=[zero_meanz],
   batch_size=100,
   progress_update=100000))
 
